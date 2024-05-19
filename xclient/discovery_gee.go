@@ -16,6 +16,7 @@ type GeeRegistryDiscovery struct {
 
 const defaultUpdateTimeout = time.Second * 10
 
+// 手动更新服务列表
 func (d *GeeRegistryDiscovery) Update(servers []string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -24,6 +25,7 @@ func (d *GeeRegistryDiscovery) Update(servers []string) error {
 	return nil
 }
 
+// 从注册中心更新服务列表
 func (d *GeeRegistryDiscovery) Refresh() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -47,6 +49,7 @@ func (d *GeeRegistryDiscovery) Refresh() error {
 	return nil
 }
 
+// 根据负载均衡策略，选择一个服务实例
 func (d *GeeRegistryDiscovery) Get(mode SelectMode) (string, error) {
 	if err := d.Refresh(); err != nil {
 		return "", err

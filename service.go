@@ -1,6 +1,8 @@
 package geerpc
 
 import (
+	"context"
+	"fmt"
 	"go/ast"
 	"log"
 	"reflect"
@@ -84,14 +86,27 @@ func (s *service) registerMethods() {
 	}
 }
 
-func (s *service) call(m *methodType, argv, replyv reflect.Value) error {
+func (s *service) call(ctx context.Context, m *methodType, argv, replyv reflect.Value) error {
 	atomic.AddUint64(&m.numCalls, 1)
 	f := m.method.Func
-	returnValues := f.Call([]reflect.Value{s.rcvr, argv, replyv})
-	if errInter := returnValues[0].Interface(); errInter != nil {
-		return errInter.(error)
+	// 创建一个通道用于接收结果
+	result := make(chan error, 1)
+	go func() {
+		returnValues := f.Call([]reflect.Value{s.rcvr, argv, replyv})
+		if errInter := returnValues[0].Interface(); errInter != nil {
+			result <- errInter.(error)
+		} else {
+			result <- nil
+		}
+	}()
+	// 等待结果或超时
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		// 如果超时，返回错误信息
+		return fmt.Errorf("call method timeout: %s", ctx.Err())
 	}
-	return nil
 }
 
 func isExportedOrBuiltinType(t reflect.Type) bool {

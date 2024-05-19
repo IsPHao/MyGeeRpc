@@ -5,6 +5,7 @@
 package geerpc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -165,10 +166,16 @@ func (server *Server) sendResponse(cc codec.Codec, h *codec.Header, body interfa
 
 func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup, timeout time.Duration) {
 	defer wg.Done()
-	called := make(chan struct{})
-	sent := make(chan struct{})
+	called := make(chan struct{}, 1)
+	sent := make(chan struct{}, 1)
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	go func() {
-		err := req.svc.call(req.mtype, req.argv, req.replyv)
+		err := req.svc.call(ctx, req.mtype, req.argv, req.replyv)
 		called <- struct{}{}
 		if err != nil {
 			req.h.Error = err.Error()
@@ -213,10 +220,10 @@ func Accept(lis net.Listener) { DefaultServer.Accept(lis) }
 
 // Register publishes in the server the set of methods of the
 // receiver value that satisfy the following conditions:
-//	- exported method of exported type
-//	- two arguments, both of exported type
-//	- the second argument is a pointer
-//	- one return value, of type error
+//   - exported method of exported type
+//   - two arguments, both of exported type
+//   - the second argument is a pointer
+//   - one return value, of type error
 func (server *Server) Register(rcvr interface{}) error {
 	s := newService(rcvr)
 	if _, dup := server.serviceMap.LoadOrStore(s.name, s); dup {
